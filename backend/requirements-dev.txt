@@ -1,0 +1,8 @@
+# Test dependencies for the Kanban backend.
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# NOTE (Member 2): see the ownership note in requirements.txt.
+-r requirements.txt
+
+pytest>=8.0
+httpx>=0.27
