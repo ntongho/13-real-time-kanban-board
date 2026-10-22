@@ -28,16 +28,22 @@ from app.database import (
 # DATABASE_URL handling
 # ---------------------------------------------------------------------------
 
-def test_postgres_scheme_is_normalized():
-    """Hosts (and older Heroku docs) emit postgres:// which SQLAlchemy rejects."""
+def test_postgres_scheme_uses_installed_psycopg_driver():
     assert (
         normalize_database_url("postgres://user:pw@host:5432/db")
-        == "postgresql://user:pw@host:5432/db"
+        == "postgresql+psycopg://user:pw@host:5432/db"
     )
 
 
-def test_postgresql_scheme_is_left_alone():
-    url = "postgresql://user:pw@host:5432/db?sslmode=require"
+def test_postgresql_scheme_uses_installed_psycopg_driver():
+    assert (
+        normalize_database_url("postgresql://user:pw@host:5432/db?sslmode=require")
+        == "postgresql+psycopg://user:pw@host:5432/db?sslmode=require"
+    )
+
+
+def test_explicit_psycopg_scheme_is_left_alone():
+    url = "postgresql+psycopg://user:pw@host:5432/db?sslmode=require"
     assert normalize_database_url(url) == url
 
 
@@ -109,10 +115,10 @@ def test_negative_position_is_rejected(db_session):
     db_session.rollback()
 
 
-def test_activity_action_must_be_created_or_moved(db_session):
+def test_activity_action_rejects_unknown_values(db_session):
     db_session.add(
         models.Activity(
-            action="deleted",
+            action="archived",
             card_id="x",
             card_title="x",
             to_column="todo",

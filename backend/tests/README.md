@@ -8,8 +8,7 @@ Owned by **Member 2 (data model and persistence tests)**.
 | `test_api.py` | HTTP contract + persistence + validation edge cases |
 | `test_models.py` | Schema constraints, `DATABASE_URL` handling, relationships |
 
-`test_realtime.py` (Member 4) and any route-specific tests Member 1 adds live
-in this directory too and can reuse the fixtures below.
+`test_realtime.py` (Member 4), `test_deployment_config.py` (app integration), `test_delete.py` (delete workflow), `test_migrations.py` (schema compatibility), and any route-specific tests Member 1 adds live in this directory too and can reuse the fixtures below.
 
 ## Run them
 
@@ -19,7 +18,7 @@ pip install -r requirements-dev.txt
 pytest              # or: pytest -v
 ```
 
-Expected: `50 passed`.
+Expected: `60 passed` on this branch (may change as tests are added).
 
 The suite never touches `backend/kanban.db`. `conftest.py` redirects
 `DATABASE_URL` to a fresh temporary database before the app is imported, and

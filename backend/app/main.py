@@ -15,16 +15,16 @@ from .realtime import manager
 
 app = FastAPI(title="Real-Time Kanban API", version="0.1.0")
 
-# CORS — allow FRONTEND_ORIGINS env or default to localhost dev ports
-frontend_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:8080")
-origins = [o.strip() for o in frontend_origins.split(",") if o.strip()]
-# For MVP demo, also allow all if wildcard not set? Keep explicit but add 127.0.0.1 variants
+# Allow only explicitly configured frontend origins. Set the deployed Vercel
+# origin in FRONTEND_ORIGINS; don't append a wildcard in production.
+frontend_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+origins = [origin.strip().rstrip("/") for origin in frontend_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins + ["*"] if "*" not in origins else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 @app.on_event("startup")

@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
 /**
- * MEMBER 3: card UI only. The optional onDelete callback is an extension,
- * not a claim that the team already has a delete API. Omit it to hide Delete.
+ * MEMBER 3: card UI only. Delete is shown when the app shell provides onDelete.
  */
 export default function Card({ card, columns, onMove, onDelete, disabled = false, pending = false, deleting = false, dragging = false, onDragStart, onDragEnd }) {
   const headingId = useId();

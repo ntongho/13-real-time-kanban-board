@@ -12,7 +12,7 @@ Entities
 --------
 BoardColumn : the three fixed MVP columns (todo / doing / done).
 Card        : a task sitting in exactly one column, ordered by `position`.
-Activity    : an audit row written for each successful create / move.
+Activity    : an audit row written for each successful create / move / delete.
 """
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ COLUMN_IDS: tuple[str, ...] = ("todo", "doing", "done")
 # Activity actions the MVP understands.
 ACTIVITY_CREATED = "created"
 ACTIVITY_MOVED = "moved"
+ACTIVITY_DELETED = "deleted"
 
 
 def _uuid4_str() -> str:
@@ -119,7 +120,7 @@ class Activity(Base):
     __tablename__ = "activities"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid4_str)
-    action: Mapped[str] = mapped_column(String(20), nullable=False)  # created | moved
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # created | moved | deleted
 
     # Intentionally NOT a ForeignKey: the activity feed is an audit log and
     # should survive even if cards are ever deleted in a later iteration.
@@ -137,7 +138,7 @@ class Activity(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "action IN ('created', 'moved')", name="ck_activities_action_valid"
+            "action IN ('created', 'moved', 'deleted')", name="ck_activities_action_valid"
         ),
         # Activity list is always "newest first".
         Index("ix_activities_created_at", "created_at"),

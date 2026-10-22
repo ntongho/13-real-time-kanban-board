@@ -67,7 +67,7 @@ export default function Board({ board = null, loading = false, error = '', onCre
     }
   }
 
-  // Optional extension: hidden unless the parent supplies a real/mock delete callback.
+  // Delete is available only when the app shell supplies the real API callback.
   async function requestDelete(cardId) {
     if (loading || actionLock.current || typeof onDelete !== 'function') throw new Error('Please wait for the current operation to finish.');
     const exists = columns.some((column) => column.cards.some((card) => card.id === cardId));

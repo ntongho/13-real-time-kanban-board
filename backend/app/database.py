@@ -14,8 +14,8 @@ Configuration
 -------------
 `DATABASE_URL` selects the database.
   * unset            -> local SQLite file at backend/kanban.db
-  * postgres://...   -> normalized to postgresql://... (Render/Heroku style URLs)
-  * postgresql://... -> used as-is (add ?sslmode=require for Neon/Supabase)
+  * postgres://...   -> normalized to postgresql+psycopg://... (Render-style URLs)
+  * postgresql://... -> normalized to the installed psycopg 3 driver (add ?sslmode=require for Neon/Supabase)
 No credentials are ever hard-coded here; hosts set DATABASE_URL as an env var.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -40,8 +40,8 @@ DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_SQLITE_PATH}"
 def normalize_database_url(raw: str | None) -> str:
     """Return a SQLAlchemy-usable URL, applying the two fixes hosts trip on.
 
-    1. Misspelled `postgres://` scheme (still emitted by some hosts) is not
-       understood by SQLAlchemy 2.x and must become `postgresql://`.
+    1. Convert common Postgres URL schemes to SQLAlchemy's psycopg 3 dialect,
+       which is the driver installed by backend/requirements.txt.
     2. A blank/whitespace env var falls back to local SQLite instead of
        creating an engine with an empty URL.
     """
@@ -49,7 +49,9 @@ def normalize_database_url(raw: str | None) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
     if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+        url = "postgresql+psycopg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
     return url
 
 
@@ -138,11 +140,52 @@ def seed_default_columns(db) -> int:
     return created
 
 
+def migrate_activity_delete_action(target_engine=engine) -> bool:
+    """Allow the `deleted` audit action on databases created before card deletion.
+
+    SQLAlchemy create_all() does not alter existing CHECK constraints. Rebuild
+    the SQLite activity table while preserving rows, or replace the named
+    PostgreSQL constraint. Returns True only when a migration was applied.
+    """
+    from .models import Activity
+
+    if target_engine.dialect.name == "sqlite":
+        with target_engine.begin() as connection:
+            ddl = connection.execute(text(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='activities'"
+            )).scalar()
+            if not ddl or "'deleted'" in ddl.lower():
+                return False
+            connection.exec_driver_sql("ALTER TABLE activities RENAME TO activities_legacy")
+            connection.exec_driver_sql("DROP INDEX IF EXISTS ix_activities_created_at")
+            Activity.__table__.create(bind=connection)
+            columns = "id, action, card_id, card_title, from_column, to_column, message, created_at"
+            connection.exec_driver_sql(
+                f"INSERT INTO activities ({columns}) SELECT {columns} FROM activities_legacy"
+            )
+            connection.exec_driver_sql("DROP TABLE activities_legacy")
+        return True
+
+    if target_engine.dialect.name == "postgresql":
+        with target_engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE activities DROP CONSTRAINT IF EXISTS ck_activities_action_valid"
+            )
+            connection.exec_driver_sql(
+                "ALTER TABLE activities ADD CONSTRAINT ck_activities_action_valid "
+                "CHECK (action IN ('created', 'moved', 'deleted'))"
+            )
+        return True
+
+    return False
+
+
 def init_db() -> None:
-    """Create tables and seed the three MVP columns. Called on app startup."""
+    """Create tables, apply small schema compatibility migration, and seed columns."""
     from . import models  # noqa: F401  (registers tables on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    migrate_activity_delete_action(engine)
 
     db = SessionLocal()
     try:
