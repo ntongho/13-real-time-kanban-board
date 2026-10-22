@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
  * Subscribe to the Kanban backend's WebSocket event stream.
  *
  * The backend broadcasts:
- *   { type: 'card.created' | 'card.moved', card: Card }
+ *   { type: 'card.created' | 'card.moved' | 'card.deleted', card: Card }
  *
  * onEvent(event) is called for each valid event. Keep board fetching/state
  * reconciliation in the app shell so this hook stays independent of UI.
@@ -41,7 +41,7 @@ export function useRealtimeBoard(onEvent, apiBaseUrl = import.meta.env.VITE_API_
       socket.onmessage = (message) => {
         try {
           const event = JSON.parse(message.data);
-          if (event && ['card.created', 'card.moved'].includes(event.type) && event.card) {
+          if (event && ['card.created', 'card.moved', 'card.deleted'].includes(event.type) && event.card) {
             onEventRef.current?.(event);
           }
         } catch (error) {

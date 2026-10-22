@@ -3,7 +3,7 @@ Real-time manager — owned by Member 4.
 
 Member 1 must call manager.broadcast(event) AFTER a successful commit.
 Contract:
-  broadcast payload is {"type":"card.created","card":{...}} or {"type":"card.moved","card":{...}}
+  broadcast payload is {"type":"card.created|card.moved|card.deleted","card":{...}}
 """
 from typing import List
 from fastapi import WebSocket

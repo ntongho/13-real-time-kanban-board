@@ -6,6 +6,7 @@ Implements:
   GET /api/boards/demo
   POST /api/boards/demo/cards  -> 201 + broadcast card.created
   PATCH /api/cards/{card_id}/move -> broadcast card.moved
+  DELETE /api/cards/{card_id} -> audit, delete, and broadcast card.deleted
   GET /api/boards/demo/activity
 
 Validation & errors delegate to schemas + explicit HTTPExceptions
@@ -237,6 +238,52 @@ async def move_card(card_id: str, payload: CardMove, db: Session = Depends(get_d
         pass
 
     return CardResponse(**card_dict)
+
+
+@router.delete("/api/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_card(card_id: str, db: Session = Depends(get_db)):
+    """Delete a card, append a durable activity record, and notify clients."""
+    card = db.query(Card).filter(Card.id == card_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    deleted_card = _card_to_dict(card)
+    column_id = card.column_id
+    column_title = VALID_COLUMNS.get(column_id, column_id)
+    activity = Activity(
+        id=str(uuid.uuid4()),
+        action="deleted",
+        card_id=card.id,
+        card_title=card.title,
+        from_column=column_id,
+        # For a deletion, to_column records the last column occupied. This keeps
+        # the existing ActivityResponse contract non-nullable.
+        to_column=column_id,
+        message=f"Deleted '{card.title}' from {column_title}",
+    )
+    db.add(activity)
+    db.delete(card)
+    db.flush()  # apply the delete inside this transaction before querying remaining cards
+
+    # Compact positions in the source column before the same commit so delete,
+    # activity, and reorder are persisted atomically.
+    remaining = (
+        db.query(Card)
+        .filter(Card.column_id == column_id)
+        .order_by(asc(Card.position), asc(Card.created_at))
+        .all()
+    )
+    for position, remaining_card in enumerate(remaining):
+        remaining_card.position = position
+    db.commit()
+
+    try:
+        await manager.broadcast({"type": "card.deleted", "card": deleted_card})
+    except Exception:
+        # A disconnected subscriber must not turn a successful delete into an API error.
+        pass
+
+    return None
 
 
 @router.get("/api/boards/demo/activity", response_model=List[ActivityResponse])
